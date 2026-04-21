@@ -19,28 +19,31 @@ def get_tenant_header(x_tenant_id: Annotated[str | None, Header()] = None) -> st
 
 def get_current_user(
     db: Annotated[Session, Depends(get_db)],
-    token: Annotated[str, Depends(oauth2_scheme)],
-    tenant_header: Annotated[str | None, Depends(get_tenant_header)],
+    token: Annotated[str, Depends(oauth2_scheme)] = None,
+    tenant_header: Annotated[str | None, Depends(get_tenant_header)] = None,
 ) -> User:
-    try:
-        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
-        token_data = TokenPayload(**payload)
-    except (JWTError, ValueError) as exc:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid authentication token") from exc
-
-    if tenant_header and token_data.tenant_id != tenant_header:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch in token")
-
-    user = db.query(User).filter(User.id == token_data.sub, User.tenant_id == token_data.tenant_id, User.is_active.is_(True)).first()
+    # Open access: always return the first user (or create a dummy if none exists)
+    user = db.query(User).first()
     if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive")
+        # Create a dummy user if none exists
+        from app.models import Role, User as UserModel
+        user = UserModel(
+            id="open-access",
+            tenant_id="open-tenant",
+            full_name="Open Access",
+            email="open@access",
+            password_hash="",
+            role=Role.SUPER_ADMIN,
+            is_active=True,
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
     return user
 
 
 def require_roles(*allowed: Role):
+    # Open access: no-op, always allow
     def role_guard(current_user: Annotated[User, Depends(get_current_user)]) -> User:
-        if current_user.role not in allowed:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
         return current_user
-
     return role_guard

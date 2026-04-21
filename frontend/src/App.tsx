@@ -22,15 +22,15 @@ import { StudioPage } from './pages/StudioPage'
 import { SubscriptionsPage } from './pages/SubscriptionsPage'
 
 function ProtectedLayout() {
-  if (!authStore.token || !authStore.tenantId) return <Navigate to="/login" replace />
-  return <Layout />
+  // Open access: always render Layout
+  return <Layout />;
 }
 
 export default function App() {
   return (
     <Router>
       <Routes>
-        <Route path="/login" element={<LoginPage />} />
+        {/* LoginPage removed for open access */}
         <Route element={<ProtectedLayout />}>
           <Route path="/" element={<DashboardPage />} />
           <Route path="/studio" element={<StudioPage />} />
